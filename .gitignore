@@ -1,0 +1,21 @@
+.env
+output/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Sensitive Keys
+*-VERTEX_KEY.json
+*.json.backup
+
+# Temporary Request Data
+request_*.json
+*.error
+*.log

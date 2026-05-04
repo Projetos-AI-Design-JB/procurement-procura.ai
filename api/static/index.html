@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROCURA.AI | Procurement Intelligence</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand">
+                <h1>PROCURA.AI</h1>
+                <p class="tagline">Multi-Agent Supplier Intelligence Pipeline</p>
+            </div>
+            <div class="user-info">
+                <span id="connection-status" class="status-badge">Checking System...</span>
+            </div>
+        </header>
+
+        <section class="onboarding card">
+            <h2>How it Works</h2>
+            <div class="steps-grid">
+                <div class="step">
+                    <span class="step-num">01</span>
+                    <h3>Deep Research</h3>
+                    <p>Agent scans thousands of data points across the web via Tavily to find pricing, SLAs, and technical specs.</p>
+                </div>
+                <div class="step">
+                    <span class="step-num">02</span>
+                    <h3>Legal &amp; Rule Audit</h3>
+                    <p>The <strong>Judge Agent</strong> cross-references findings against your specific business rules and budget.</p>
+                </div>
+                <div class="step">
+                    <span class="step-num">03</span>
+                    <h3>Executive Synthesis</h3>
+                    <p>The <strong>Synthesizer Agent</strong> generates a professional MD report with a final decision.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="new-request card">
+            <h2>New Intelligence Request</h2>
+            <form id="research-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Supplier / Product Name</label>
+                        <input type="text" id="supplier_name" placeholder="e.g. AWS S3, Notion, Dell XPS 15..." required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="category" required>
+                            <option value="" disabled selected>Select a category...</option>
+                            <option value="Cloud Storage">Cloud Storage</option>
+                            <option value="Laptop / Hardware">Laptop / Hardware</option>
+                            <option value="SaaS Collaboration">SaaS / Collaboration</option>
+                            <option value="Database / Backend">Database / Backend</option>
+                            <option value="Security Software">Security Software</option>
+                            <option value="CRM / Sales Tools">CRM / Sales Tools</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Proposed Price (USD/mo)</label>
+                        <input type="number" id="proposed_price" placeholder="400" min="1" required title="The specific price you were quoted">
+                    </div>
+                    <div class="form-group">
+                        <label>Budget Ceiling (USD/mo)</label>
+                        <input type="number" id="budget" placeholder="500" min="1" required title="Your maximum allowed budget">
+                    </div>
+                </div>
+
+                <div class="features-section" id="features-section" style="display:none;">
+                    <label class="features-label">Required Features <span class="features-hint">— select what the supplier MUST have</span></label>
+                    <div id="feature-checkboxes" class="feature-grid"></div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="submit-btn" id="submit-btn" disabled>
+                        <span>&#9889; Start Deep Research</span>
+                    </button>
+                    <p class="form-hint" id="form-hint">Select a category to see available evaluation parameters</p>
+                </div>
+            </form>
+        </section>
+
+        <main class="dashboard-grid">
+            <section class="card">
+                <h2>Active Requests <small>(Click to Research)</small></h2>
+                <div id="request-list" class="request-list">
+                    <div class="item">Loading...</div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Generated Intelligence <small>(Click to View Report)</small></h2>
+                <div id="report-list" class="report-list">
+                    <div class="item">Waiting for research...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let isRunning = false;
+
+        // Feature catalog — ASCII-safe labels to avoid encoding issues in JS strings
+        const FEATURE_CATALOG = {
+            'Cloud Storage': [
+                'S3-compatible API', '99.9% SLA uptime', 'Encryption at rest',
+                'Multi-region replication', 'Pay-as-you-go pricing',
+                'CDN / Edge delivery', 'SOC2 / ISO 27001 compliance', 'Object versioning'
+            ],
+            'Laptop / Hardware': [
+                'RAM >=16GB', 'SSD >=512GB', 'Battery life >=8h', 'Thunderbolt 4 port',
+                'Weight <1.5 kg', 'Fingerprint / Face ID', 'Display >=14in FHD',
+                'Wi-Fi 6 / 6E support'
+            ],
+            'SaaS Collaboration': [
+                'SSO / SAML support', 'REST API access', 'Audit logs',
+                'Role-based permissions', '99.9% SLA uptime',
+                'Mobile app (iOS & Android)', 'Slack integration', 'Data export (CSV/JSON)'
+            ],
+            'Database / Backend': [
+                'Managed backups', 'Point-in-time recovery', 'Auto-scaling',
+                'Multi-region support', 'SOC2 compliance', 'Read replicas',
+                'Connection pooling', 'PostgreSQL compatibility'
+            ],
+            'Security Software': [
+                'Zero Trust architecture', 'SOC2 Type II certified', 'GDPR compliance',
+                'MFA enforcement', 'End-to-end encryption', 'SIEM integration',
+                'Incident response SLA', 'Penetration test reports'
+            ],
+            'CRM / Sales Tools': [
+                'Email integration (Gmail / Outlook)', 'Pipeline automation',
+                'Lead scoring', 'API / Webhook support', 'Mobile CRM app',
+                'Custom fields & objects', 'Reporting dashboards', 'Zapier / Make integration'
+            ]
+        };
+
+        // Category change handler
+        document.getElementById('category').addEventListener('change', function() {
+            const cat = this.value;
+            const section = document.getElementById('features-section');
+            const grid = document.getElementById('feature-checkboxes');
+            const hint = document.getElementById('form-hint');
+            const btn = document.getElementById('submit-btn');
+
+            if (!cat || !FEATURE_CATALOG[cat]) { section.style.display = 'none'; return; }
+
+            const features = FEATURE_CATALOG[cat];
+            grid.innerHTML = features.map(f =>
+                `<label class="feature-chip"><input type="checkbox" name="feature" value="${f}" checked><span>${f}</span></label>`
+            ).join('');
+
+            section.style.display = 'block';
+            hint.textContent = `${features.length} evaluation parameters available. Uncheck any that don't apply.`;
+            btn.disabled = false;
+        });
+
+        // Data fetching
+        async function fetchData() {
+            try {
+                const ts = Date.now();
+                const [reqRes, repRes] = await Promise.all([
+                    fetch('/api/requests?_t=' + ts),
+                    fetch('/api/reports?_t=' + ts)
+                ]);
+                const reqData = await reqRes.json();
+                const repData = await repRes.json();
+                updateStatus(reqData.status);
+                renderRequests(reqData.data || []);
+                renderReports(repData.data || []);
+            } catch (err) {
+                console.error('Fetch failed:', err);
+            }
+        }
+
+        function updateStatus(status) {
+            const el = document.getElementById('connection-status');
+            el.textContent = status === 'online' ? '&#9679; Supabase Connected' : '&#9679; Local Sandbox Mode';
+            el.className = 'status-badge' + (status === 'online' ? ' status-done' : '');
+        }
+
+        // Trash icon SVG (inline constant — no encoding issues)
+        const TRASH_SVG = '<svg style="pointer-events:none" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+        function renderRequests(requests) {
+            const list = document.getElementById('request-list');
+            if (requests.length === 0) {
+                list.innerHTML = '<div class="item empty-state">No requests yet — start a research above.</div>';
+                return;
+            }
+            list.innerHTML = requests.map(req => {
+                const isDone = req.status === 'done';
+                const isError = req.status === 'error';
+                const isThisRunning = isRunning && !isDone && !isError;
+                
+                const badgeClass = isDone ? 'status-done' : (isError ? 'status-error' : (isThisRunning ? 'status-researching' : 'status-ready'));
+                const badgeText = isDone ? '&#10003; Report Ready' : (isError ? '&#9888; Error (Retry)' : (isThisRunning ? 'Researching...' : '&#9654; Research'));
+                const action = isDone ? 'view' : 'run';
+                
+                return `<div class="item${isDone ? ' done-item' : ''}" data-action="${action}" data-id="${req.request_id}">
+                    <div class="item-header">
+                        <span class="item-title">${req.supplier_name}</span>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span class="status-badge ${badgeClass}">${badgeText}</span>
+                            <button class="delete-btn" data-action="delete" data-id="${req.request_id}" title="Delete">${TRASH_SVG}</button>
+                        </div>
+                    </div>
+                    <div class="item-meta">
+                        <span>ID: ${req.request_id}</span>
+                        <span>Budget: $${req.budget_usd}/mo</span>
+                    </div>
+                    ${isError && req.error_message ? `<div style="color: #e74c3c; font-size: 0.85em; margin-top: 8px;">${req.error_message}</div>` : ''}
+                    ${isThisRunning ? '<div class="progress-bar"><div class="progress-fill"></div></div>' : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function renderReports(reports) {
+            const list = document.getElementById('report-list');
+            if (reports.length === 0) {
+                list.innerHTML = '<div class="item empty-state">No reports yet — click Research on any request.</div>';
+                return;
+            }
+            const decisionColor = { approved: 'status-done', rejected: 'status-error', pending_review: 'status-researching' };
+            list.innerHTML = reports.map(rep => {
+                const dec = (rep.decision || 'pending').toLowerCase();
+                const cls = decisionColor[dec] || 'status-ready';
+                const label = dec.replace('_', ' ').toUpperCase();
+                const date = rep.created_at ? new Date(rep.created_at).toLocaleString() : 'N/A';
+                return `<div class="item report-item" data-action="view" data-id="${rep.request_id}">
+                    <div class="item-header">
+                        <span class="item-title">${rep.supplier_name || rep.request_id}</span>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span class="status-badge ${cls}">${label}</span>
+                            <button class="delete-btn" data-action="delete" data-id="${rep.request_id}" title="Delete">${TRASH_SVG}</button>
+                        </div>
+                    </div>
+                    <p class="report-summary">Click to open the full Intelligence Brief</p>
+                    <div class="item-meta" style="margin-top:10px;">
+                        <span>${date}</span>
+                        <span>ID: ${rep.request_id}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Delegated click handler — single listener handles all actions
+        document.addEventListener('click', function(e) {
+            const el = e.target.closest('[data-action]');
+            if (!el) return;
+            const action = el.dataset.action;
+            const id = el.dataset.id;
+            if (!id) return;
+
+            if (action === 'delete') {
+                e.stopPropagation();
+                handleDelete(id);
+            } else if (action === 'run') {
+                handleRun(id);
+            } else if (action === 'view') {
+                window.open('/reports/report_' + id + '.md', '_blank');
+            }
+        });
+
+        async function handleDelete(requestId) {
+            try {
+                const res = await fetch('/api/request/' + requestId, { method: 'DELETE' });
+                if (!res.ok) throw new Error('Server responded ' + res.status);
+                fetchData();
+            } catch (err) {
+                alert('Error deleting: ' + err.message);
+            }
+        }
+
+        async function handleRun(requestId) {
+            if (isRunning) return;
+            isRunning = true;
+            fetchData();
+            try {
+                const res = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ request_file: 'request_' + requestId + '.json' })
+                });
+                if (!res.ok) throw new Error('Failed to start research');
+                fetchData();
+                const poll = setInterval(async () => {
+                    const [reqRes, repRes] = await Promise.all([
+                        fetch('/api/requests'),
+                        fetch('/api/reports')
+                    ]);
+                    const reqs = await reqRes.json();
+                    const reps = await repRes.json();
+                    
+                    const myReq = (reqs.data || []).find(r => r.request_id === requestId);
+                    const hasReport = (reps.data || []).some(rep => rep.request_id === requestId);
+
+                    if (hasReport) {
+                        clearInterval(poll); isRunning = false; fetchData();
+                        alert('Intelligence Report successfully generated! It is now available in the dashboard.');
+                        window.open('/reports/report_' + requestId + '.md', '_blank');
+                    } else if (myReq && myReq.status === 'error') {
+                        clearInterval(poll); isRunning = false; fetchData();
+                        alert('Intelligence Research failed for ' + requestId + '. Check server logs for details.');
+                    }
+                }, 4000);
+                setTimeout(() => { clearInterval(poll); isRunning = false; fetchData(); }, 600000);
+            } catch (err) {
+                alert('Pipeline failed: ' + err.message);
+                isRunning = false; fetchData();
+            }
+        }
+
+        // Form submit
+        document.getElementById('research-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            if (isRunning) return;
+
+            const checked = [...document.querySelectorAll('input[name="feature"]:checked')].map(el => el.value);
+            if (checked.length === 0) { alert('Please select at least one required feature.'); return; }
+
+            const payload = {
+                supplier_name: document.getElementById('supplier_name').value.trim(),
+                category: document.getElementById('category').value,
+                proposed_price: parseFloat(document.getElementById('proposed_price').value),
+                budget_usd: parseFloat(document.getElementById('budget').value),
+                required_features: checked
+            };
+
+            isRunning = true;
+            fetchData();
+
+            try {
+                const res = await fetch('/api/research', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Server error');
+
+                document.getElementById('research-form').reset();
+                document.getElementById('features-section').style.display = 'none';
+                document.getElementById('submit-btn').disabled = true;
+                document.getElementById('form-hint').textContent = 'Select a category to see available evaluation parameters';
+
+                const newId = data.request_id;
+                await fetchData(); // Update UI immediately so the new request shows up
+
+                const poll = setInterval(async () => {
+                    try {
+                        const ts = Date.now();
+                        const [reqRes, repRes] = await Promise.all([
+                            fetch('/api/requests?_t=' + ts),
+                            fetch('/api/reports?_t=' + ts)
+                        ]);
+                        const reqs = await reqRes.json();
+                        const reps = await repRes.json();
+                        
+                        renderRequests(reqs.data || []);
+                        renderReports(reps.data || []);
+                        
+                        const myReq = (reqs.data || []).find(r => r.request_id === newId);
+                        const hasReport = (reps.data || []).some(rep => rep.request_id === newId);
+
+                        if (hasReport) {
+                            clearInterval(poll); isRunning = false; await fetchData();
+                            alert('Intelligence Report successfully generated! It is now available in the dashboard.');
+                            window.open('/reports/report_' + newId + '.md', '_blank');
+                        } else if (myReq && myReq.status === 'error') {
+                            clearInterval(poll); isRunning = false; await fetchData();
+                            alert('Error: ' + (myReq.error_message || 'Research failed') + '\n\nCheck server logs for full details.');
+                        }
+                    } catch(e) {
+                        console.error("Polling error", e);
+                    }
+                }, 4000);
+                setTimeout(() => { clearInterval(poll); isRunning = false; fetchData(); }, 600000);
+            } catch (err) {
+                alert('Research failed: ' + err.message);
+                isRunning = false;
+            }
+        });
+
+        fetchData();
+        setInterval(fetchData, 5000);
+    </script>
+</body>
+</html>
